@@ -75,3 +75,49 @@ def test_vague_percentage_request_asks_what_to_calculate():
 
     assert "какой показатель" in result.answer
     assert result.trace == []
+
+
+def test_cost_proposal_route_requires_contract_number():
+    engine = sample_engine()
+    agent = LocalAgent()
+
+    def unexpected_llm_call(*args, **kwargs):
+        raise AssertionError("A contract number is required before cost generation.")
+
+    agent._generate_cost_options = unexpected_llm_call
+    result = agent.run("Предложи стоимость", engine, date(2026, 3, 10))
+
+    assert "Уточните номер договора" in result.answer
+    assert result.options == []
+
+
+def test_cost_proposal_route_calls_structured_generator_for_missing_amount():
+    engine = sample_engine()
+    agent = LocalAgent()
+    expected = [{"label": "Экономный", "amount_rub": 100000, "rationale": "Тест", "assumptions": ["Тестовое допущение"], "risks": "Нужна спецификация"}]
+
+    def fake_generator(contract_number, engine, as_of_date):
+        assert contract_number == "STN-103"
+        return __import__("src.agent", fromlist=["AgentResult"]).AgentResult(
+            answer="Сценарии подготовлены", options=expected * 3
+        )
+
+    agent._generate_cost_options = fake_generator
+    result = agent.run("Предложи стоимость 103", engine, date(2026, 3, 10))
+
+    assert len(result.options) == 3
+    assert "Сценарии подготовлены" in result.answer
+
+
+def test_cost_proposal_does_not_override_existing_contract_amount():
+    engine = sample_engine()
+    agent = LocalAgent()
+
+    def unexpected_llm_call(*args, **kwargs):
+        raise AssertionError("Existing contract price should be checked before generation.")
+
+    agent._generate_cost_options = unexpected_llm_call
+    result = agent.run("Предложи стоимость STN-102", engine, date(2026, 3, 10))
+
+    assert "840 000 ₽" in result.answer
+    assert result.options == []
