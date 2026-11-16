@@ -36,6 +36,31 @@ def evidence_markdown(field, label: str) -> None:
     st.markdown(f'<a href="#{anchor}">Перейти к исходному абзацу ↓</a>', unsafe_allow_html=True)
 
 
+def render_cost_options(options: list[dict], message_index: int) -> None:
+    if not options:
+        return
+    st.markdown("**Варианты предварительной стоимости**")
+    columns = st.columns(len(options))
+    for index, (column, option) in enumerate(zip(columns, options)):
+        with column:
+            st.markdown(f"**{option['label']}**")
+            st.subheader(f"{option['amount_rub']:,.0f} ₽".replace(",", " "))
+            st.write(option["rationale"])
+            with st.expander("Допущения и риски"):
+                for assumption in option["assumptions"]:
+                    st.write(f"• {assumption}")
+                st.warning(option["risks"])
+            if st.button("Выбрать вариант", key=f"cost_option_{message_index}_{index}", use_container_width=True):
+                st.session_state[f"selected_cost_option_{message_index}"] = option
+                st.session_state[f"selected_cost_option_notice_{message_index}"] = True
+    selected = st.session_state.get(f"selected_cost_option_{message_index}")
+    if selected:
+        st.success(
+            f"Вы выбрали: {selected['label']} — {selected['amount_rub']:,.0f} ₽. "
+            "Это предварительный вариант для обсуждения; договор не изменён."
+        )
+
+
 def quick_answer(engine: ContractEngine, question_id: int, as_of: date) -> str:
     if question_id == 1:
         snap = engine.snapshot("STN-101", as_of)
@@ -212,14 +237,17 @@ with tab_overview:
 with tab_chat:
     st.subheader("Задайте вопрос о загруженных договорах")
     st.caption(
-        "Агент использует только семь разрешённых инструментов. Бизнес-правила "
-        "и определение действующих условий выполняет Python workflow, а не LLM."
+        "Агент использует семь разрешённых инструментов. Бизнес-правила и определение "
+        "действующих условий выполняет Python workflow; предварительные варианты стоимости "
+        "LLM генерирует отдельно, а пользователь подтверждает выбор."
     )
     if "chat_messages" not in st.session_state:
         st.session_state.chat_messages = []
     for item in st.session_state.chat_messages:
         with st.chat_message(item["role"]):
             st.markdown(item["content"])
+            if item.get("options"):
+                render_cost_options(item["options"], item.get("message_index", 0))
             if item.get("trace"):
                 with st.expander("Трассировка инструментов"):
                     for event in item["trace"]:
@@ -249,13 +277,17 @@ with tab_chat:
                     else:
                         answer = result.answer
                     st.markdown(answer)
+                    message_index = len(st.session_state.chat_messages)
+                    if result.options:
+                        render_cost_options(result.options, message_index)
                     if result.trace:
                         with st.expander("Трассировка инструментов"):
                             for event in result.trace:
                                 st.markdown(f"**Шаг {event['step']} · {event['tool']}**")
                                 st.json({"arguments": event["arguments"], "result": event["result"]})
                     st.session_state.chat_messages.append({
-                        "role": "assistant", "content": answer, "trace": result.trace
+                        "role": "assistant", "content": answer, "trace": result.trace,
+                        "options": result.options, "message_index": message_index
                     })
                 except Exception as exc:
                     message = (
