@@ -50,7 +50,7 @@ def render_cost_options(options: list[dict], message_index: int) -> None:
                 for assumption in option["assumptions"]:
                     st.write(f"• {assumption}")
                 st.warning(option["risks"])
-            if st.button("Выбрать вариант", key=f"cost_option_{message_index}_{index}", use_container_width=True):
+            if st.button("Выбрать вариант", key=f"cost_option_{message_index}_{index}", width="stretch"):
                 st.session_state[f"selected_cost_option_{message_index}"] = option
                 st.session_state[f"selected_cost_option_notice_{message_index}"] = True
     selected = st.session_state.get(f"selected_cost_option_{message_index}")
@@ -199,7 +199,7 @@ with tab_overview:
             "Статус срока": snap.delivery_date.status,
         })
     st.subheader(f"Действующие условия на {as_of:%d.%m.%Y}")
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
     st.subheader("Проверяемые основания")
     if not snapshots:
@@ -239,7 +239,7 @@ with tab_overview:
                 "Предлагаемое значение": value,
                 "Абзац": item["evidence"]["paragraph_number"],
             })
-        st.dataframe(pd.DataFrame(display_rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(display_rows), width="stretch", hide_index=True)
         for item in proposed_rows:
             with st.expander(f"{item['contract_number']} · {item['filename']} · {item['field']}"):
                 st.write(item["evidence"]["quote"])
@@ -251,7 +251,7 @@ with tab_overview:
     quick_cols = st.columns(4)
     labels = ["Срок STN-101", "Сумма STN-102", "Сумма STN-103", "Поставка до 01.04"]
     for index, col in enumerate(quick_cols, start=1):
-        if col.button(labels[index - 1], use_container_width=True):
+        if col.button(labels[index - 1], width="stretch"):
             st.session_state["quick_answer"] = quick_answer(engine, index, as_of)
     if st.session_state.get("quick_answer"):
         st.info(st.session_state["quick_answer"])
