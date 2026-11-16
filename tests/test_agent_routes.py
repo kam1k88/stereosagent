@@ -219,3 +219,23 @@ def test_factual_tool_planning_ignores_previous_chat_history():
     assert result.trace[0]["tool"] == "get_contract_snapshot"
     assert result.trace[0]["arguments"]["contract_number"] == "STN-103"
     assert result.answerability["status"] == "unanswerable"
+
+
+def test_tool_snapshot_uses_ui_review_date_not_model_supplied_date():
+    from src.tools import build_tools
+
+    engine = sample_engine()
+    review_date = date(2026, 3, 10)
+    schemas, registry = build_tools(engine, review_date)
+
+    snapshot_schema = next(
+        item["function"] for item in schemas
+        if item["function"]["name"] == "get_contract_snapshot"
+    )
+    assert "as_of" not in snapshot_schema["parameters"]["properties"]
+
+    # Even if a stale/old client supplies the argument, it must not change the review date.
+    result = registry["get_contract_snapshot"]("STN-101", as_of="2023-10-01")
+    assert result["as_of_date"] == "2026-03-10"
+    assert result["amount"]["value_rubles"] == "1 380 000 RUB"
+    assert result["delivery_date"]["value"] == "2026-04-30"
