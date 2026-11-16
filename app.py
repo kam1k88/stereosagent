@@ -240,7 +240,7 @@ with tab_chat:
                         for m in st.session_state.chat_messages[:-1]
                     ]
                     result = agent.run(prompt, engine, as_of, history)
-                    if not result.trace:
+                    if not result.trace and result.messages:
                         answer = (
                             "Модель не вызвала ни одного инструмента. Чтобы не выдавать "
                             "непроверенный ответ о договоре, я не буду считать ответ подтверждённым. "
