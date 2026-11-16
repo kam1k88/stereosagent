@@ -47,14 +47,12 @@ def _resolve_field(base: ParsedDocument | None, amendments: list[ParsedDocument]
             candidates.append((doc, doc.fields[field_name]))
         elif doc.document_type == "amendment_signed":
             result.issues.append(f"{doc.filename}: {reason}")
-            if result.status == "not_found":
-                result.status = "needs_review"
+            result.status = "needs_review"
 
     candidates.sort(key=lambda pair: (pair[0].effective_date or date.min,
                                       pair[0].signature_date or date.min,
                                       pair[0].filename))
 
-    # Conflicting agreements with the same effective/signature dates are not resolved by file order.
     for left, right in zip(candidates, candidates[1:]):
         if (left[0].effective_date, left[0].signature_date) == (right[0].effective_date, right[0].signature_date):
             if left[1].value != right[1].value:
