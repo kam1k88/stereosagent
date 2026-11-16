@@ -6,16 +6,9 @@ from typing import Iterable
 
 from .extractor import extract_document
 from .models import ParsedDocument
+from .party_roles import resolve_party_role
 from .resolver import resolve_contract
 from .rules import load_rules
-
-
-def _party_key(value: str | None) -> str:
-    if not value:
-        return ""
-    return " ".join(
-        value.casefold().replace("«", "").replace("»", "").replace('"', "").split()
-    ).strip(" .;,:")
 
 
 class ContractEngine:
@@ -49,22 +42,8 @@ class ContractEngine:
         return resolve_contract(contract_number.upper(), self.documents, as_of, self.rules)
 
     def party_role(self, contract_number: str, party_name: str | None) -> str:
-        """Resolve a party's role in this contract, never globally by organization name."""
-        if not party_name:
-            return "unknown"
-        contracts = [
-            d for d in self.documents
-            if d.document_type == "contract" and d.contract_number == contract_number.upper()
-        ]
-        if len(contracts) != 1:
-            return "unknown"
-        contract = contracts[0]
-        key = _party_key(party_name)
-        if key and key == _party_key(contract.supplier):
-            return "supplier"
-        if key and key == _party_key(contract.buyer):
-            return "buyer"
-        return "unknown"
+        return resolve_party_role(contract_number, party_name, self.documents)
+
 
     def find_documents(self, query: str = "") -> list[dict]:
         q = query.casefold().strip()
