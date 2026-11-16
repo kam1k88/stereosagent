@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from .classifier import classify_document
 from .ingestion import normalize_text, sha256, split_paragraphs
 from .models import Evidence, ParsedDocument
-
 
 DATE_RE = r"(\d{2}\.\d{2}\.\d{4})"
 AMOUNT_TOKEN = r"(\d[\d \u00a0\u202f]*(?:[.,]\d{1,2})?)"
@@ -15,13 +14,7 @@ AMOUNT_TOKEN = r"(\d[\d \u00a0\u202f]*(?:[.,]\d{1,2})?)"
 
 def parse_date(value: str) -> date | None:
     try:
-        return date.strptime(value.strip(), "%d.%m.%Y")
-    except AttributeError:
-        try:
-            from datetime import datetime
-            return datetime.strptime(value.strip(), "%d.%m.%Y").date()
-        except ValueError:
-            return None
+        return datetime.strptime(value.strip(), "%d.%m.%Y").date()
     except ValueError:
         return None
 
@@ -37,8 +30,7 @@ def parse_amount_kopecks(value: str) -> int | None:
 
 
 def _evidence(doc_id: str, filename: str, paragraphs: list[str], index: int, value: Any) -> Evidence:
-    quote = paragraphs[index].strip()
-    return Evidence(value, filename, index + 1, quote, doc_id)
+    return Evidence(value, filename, index + 1, paragraphs[index].strip(), doc_id)
 
 
 def _find_first(paragraphs: list[str], patterns: list[str], converter, doc_id: str, filename: str):
@@ -55,19 +47,22 @@ def _find_first(paragraphs: list[str], patterns: list[str], converter, doc_id: s
 def extract_document(filename: str, raw: bytes) -> ParsedDocument:
     original = raw.decode("utf-8-sig", errors="replace")
     if "\ufffd" in original:
-        for encoding in ("cp1251",):
-            try:
-                original = raw.decode(encoding)
-                break
-            except UnicodeDecodeError:
-                pass
+        try:
+            original = raw.decode("cp1251")
+        except UnicodeDecodeError:
+            pass
     text = normalize_text(original)
     paragraphs = split_paragraphs(text)
     digest = sha256(raw)
     document_id = digest[:12]
     doc_type = classify_document(text)
 
-    number_match = re.search(r"(?:договор(?:а)?(?:\s+поставки)?|к\s+договору)\s*(?:№|N)?\s*(STN[-–]\d+)", text, re.IGNORECASE)
+    number_match = re.search(
+        r"(?:договор(?:а|у)?(?:\s+поставки)?|к\s+договору|по\s+договору)"
+        r"\s*(?:№|N)?\s*(STN[-–]\d+)",
+        text,
+        re.IGNORECASE,
+    )
     contract_number = number_match.group(1).replace("–", "-").upper() if number_match else None
 
     supplier_evidence = _find_first(
@@ -95,6 +90,7 @@ def extract_document(filename: str, raw: bytes) -> ParsedDocument:
             match = re.search(DATE_RE, paragraph)
             if match:
                 effective_date = parse_date(match.group(1))
+
     if doc_type == "contract" and signed_by_both is None:
         signed_by_both = False
 
@@ -107,26 +103,22 @@ def extract_document(filename: str, raw: bytes) -> ParsedDocument:
         rf"постав\w{{0,30}}?не\s+позднее\s+{DATE_RE}",
         rf"срок\s+поставки\s+(?:изменить\s+)?на\s+{DATE_RE}",
         rf"перенести\s+срок\s+поставки\s+.{0,60}?\s+на\s+{DATE_RE}",
-        rf"поставк\w{{0,20}}?\s+на\s+{DATE_RE}",
     ]
 
     fields: dict[str, Evidence] = {}
-    amount_ev = _find_first(
-        paragraphs, amount_patterns, parse_amount_kopecks, document_id, filename
-    )
+    amount_ev = _find_first(paragraphs, amount_patterns, parse_amount_kopecks, document_id, filename)
     if amount_ev:
         fields["amount"] = amount_ev
-
-    delivery_ev = _find_first(
-        paragraphs, delivery_patterns, parse_date, document_id, filename
-    )
+    delivery_ev = _find_first(paragraphs, delivery_patterns, parse_date, document_id, filename)
     if delivery_ev:
         fields["delivery_date"] = delivery_ev
 
     issues: list[str] = []
     if not contract_number:
         issues.append("Не удалось определить номер договора.")
-    if doc_type == "amendment_signed" and (signed_by_both is not True or not signature_date or not effective_date):
+    if doc_type == "amendment_signed" and (
+        signed_by_both is not True or not signature_date or not effective_date
+    ):
         issues.append("Недостаточно подтверждений подписания или даты вступления в силу.")
 
     return ParsedDocument(
