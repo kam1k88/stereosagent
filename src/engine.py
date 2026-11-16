@@ -53,8 +53,7 @@ class ContractEngine:
             row = dict(item)
             source_doc = next(
                 (doc for doc in self.documents
-                 if doc.contract_number == snapshot.contract_number
-                 and doc.filename == item.get("source")),
+                 if doc.document_id == item.get("document_id")),
                 None,
             )
             evidence = source_doc.fields.get(field_name) if source_doc else None
