@@ -355,6 +355,35 @@ class LocalAgent:
                 candidate = assistant.get("content", "").strip()
                 if not candidate:
                     candidate = "Модель не вернула текстовый ответ."
+                tool_failures = [
+                    item for item in trace
+                    if (item.get("result") or {}).get("status")
+                    in {"error", "invalid_arguments", "invalid_argument", "tool_error"}
+                ]
+                successful_tools = [
+                    item for item in trace
+                    if (item.get("result") or {}).get("status")
+                    not in {"error", "invalid_arguments", "invalid_argument", "tool_error"}
+                ]
+                if tool_failures and not successful_tools:
+                    details = "; ".join(
+                        f"{item.get('tool')}: {(item.get('result') or {}).get('message', 'ошибка вызова')}"
+                        for item in tool_failures
+                    )
+                    return AgentResult(
+                        answer=(
+                            "Не удалось выполнить проверку: инструмент завершился с ошибкой. "
+                            "Это не означает, что сведения отсутствуют в договоре. "
+                            f"Техническая причина: {details}"
+                        ),
+                        messages=messages,
+                        trace=trace,
+                        answerability={
+                            "status": "not_assessed",
+                            "reason": "Инструмент не выполнился; отсутствие данных не установлено.",
+                            "missing_information": [],
+                        },
+                    )
                 try:
                     assessment = self._assess_answerability(user_text, candidate, trace)
                     answer = assessment.get("answer", candidate)
