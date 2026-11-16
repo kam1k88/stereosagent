@@ -121,3 +121,55 @@ def test_cost_proposal_does_not_override_existing_contract_amount():
 
     assert "840 000 ₽" in result.answer
     assert result.options == []
+
+
+def test_answerability_assessment_distinguishes_missing_attachment_from_missing_value():
+    agent = LocalAgent()
+    captured = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return {"message": {"content": '{"status":"unanswerable","answer":"Стоимость не определена.","reason":"Договор отсылает к отсутствующему приложению № 1.","missing_information":["Загрузить приложение № 1 или подписанную спецификацию."]}'}}
+
+    def fake_post(url, json, timeout):
+        captured["payload"] = json
+        return FakeResponse()
+
+    import src.agent as agent_module
+    original = agent_module.requests.post
+    agent_module.requests.post = fake_post
+    try:
+        result = agent._assess_answerability(
+            "Какая сумма STN-103?", "Сумма не найдена.",
+            [{"tool": "get_contract_snapshot", "result": {"amount": {"status": "not_found", "issues": ["Стоимость определяется приложением № 1"]}}}],
+        )
+    finally:
+        agent_module.requests.post = original
+
+    assert result["status"] == "unanswerable"
+    assert "приложение № 1" in result["reason"]
+    assert result["missing_information"] == ["Загрузить приложение № 1 или подписанную спецификацию."]
+    assert "format" in captured["payload"]
+
+
+def test_answerability_assessment_marks_empty_trace_as_not_evidence():
+    agent = LocalAgent()
+
+    class FakeResponse:
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return {"message": {"content": '{"status":"unanswerable","answer":"Не могу подтвердить ответ.","reason":"Инструменты не предоставили доказательств.","missing_information":["Уточнить номер договора."]}'}}
+
+    import src.agent as agent_module
+    original = agent_module.requests.post
+    agent_module.requests.post = lambda *args, **kwargs: FakeResponse()
+    try:
+        result = agent._assess_answerability("Сколько стоит договор?", "Наверное, 500000 ₽", [])
+    finally:
+        agent_module.requests.post = original
+
+    assert result["status"] == "unanswerable"
+    assert "500000" not in result["answer"]
