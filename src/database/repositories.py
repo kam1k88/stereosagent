@@ -4,7 +4,7 @@ import json
 from datetime import date, datetime
 from typing import Any
 
-from .models import ParsedDocument
+from ..models import ParsedDocument
 
 
 def _json_value(value: Any) -> str:
