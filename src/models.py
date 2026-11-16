@@ -36,6 +36,10 @@ class ParsedDocument:
     contract_number: str | None = None
     supplier: str | None = None
     supplier_evidence: Evidence | None = None
+    buyer: str | None = None
+    buyer_evidence: Evidence | None = None
+    sender: str | None = None
+    recipient: str | None = None
     signature_date: date | None = None
     effective_date: date | None = None
     signed_by_both: bool | None = None
