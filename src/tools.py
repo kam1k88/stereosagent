@@ -88,6 +88,26 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
         counts = [item for item in counts if item["applied_change_count"] >= min_changes]
         return {"proposed_changes": rows, "applied_change_counts": counts}
 
+    def find_proposed_changes(
+        field_name: str | None = None,
+        party_role: str | None = None,
+        status: str = "PROPOSED",
+        contract_number: str | None = None,
+    ) -> dict[str, Any]:
+        """Find non-binding proposals and resolve sender/recipient roles per contract."""
+        if party_role not in (None, "supplier", "buyer"):
+            return {"status": "invalid_argument", "message": "party_role: supplier или buyer."}
+        if status != "PROPOSED":
+            return {"status": "unsupported_status", "message": "В MVP доступны предложения со статусом PROPOSED."}
+        rows = engine.proposed_changes(
+            contract_number=contract_number,
+            as_of=as_of_date,
+            field_name=field_name,
+            party_role=party_role,
+            status=status,
+        )
+        return {"status": "ok", "count": len(rows), "proposals": rows}
+
     def find_early_deliveries(cutoff_date: str = "2026-04-01", as_of: str | None = None) -> dict[str, Any]:
         cutoff = _parse_date(cutoff_date, date(2026, 4, 1))
         review_date = _parse_date(as_of, as_of_date)
@@ -163,6 +183,16 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
             }, "required": []},
         }},
         {"type": "function", "function": {
+            "name": "find_proposed_changes",
+            "description": "Найти несогласованные предложения изменений и определить, кто их инициировал в контексте конкретного договора. Используй, если спрашивают, какие поставщики/покупатели предлагают изменить условия. sender_role определяется сравнением отправителя с поставщиком и покупателем базового договора, а не по одному слову в письме.",
+            "parameters": {"type": "object", "properties": {
+                "field_name": {"type": "string", "enum": ["amount", "delivery_date"]},
+                "party_role": {"type": "string", "enum": ["supplier", "buyer"]},
+                "status": {"type": "string", "enum": ["PROPOSED"]},
+                "contract_number": {"type": "string"}
+            }, "required": []},
+        }},
+        {"type": "function", "function": {
             "name": "find_early_deliveries",
             "description": "Найти договоры с действующим сроком поставки раньше заданной даты и показать несогласованные предложения переноса.",
             "parameters": {"type": "object", "properties": {
@@ -192,6 +222,7 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
         "search_contracts": search_contracts,
         "get_contract_snapshot": get_contract_snapshot,
         "analyze_contract_changes": analyze_contract_changes,
+        "find_proposed_changes": find_proposed_changes,
         "find_early_deliveries": find_early_deliveries,
         "trace_field": trace_field,
         "get_source_evidence": get_source_evidence,
