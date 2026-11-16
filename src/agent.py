@@ -329,11 +329,14 @@ class LocalAgent:
             return deterministic
 
         schemas, registry = build_tools(engine, as_of_date)
-        messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
-        for item in (history or [])[-10:]:
-            if item.get("role") in ("user", "assistant") and isinstance(item.get("content"), str):
-                messages.append({"role": item["role"], "content": item["content"]})
-        messages.append({"role": "user", "content": user_text})
+        # Contract facts must be resolved from the current question and current-session
+        # tools only. Prior assistant text is not evidence and can suppress tool calls in
+        # smaller local models (e.g. Qwen 7B). Keep history in the UI, but do not feed it
+        # into the factual tool-planning context. Ambiguous follow-ups should be clarified.
+        messages: list[dict] = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_text},
+        ]
         trace: list[dict[str, Any]] = []
 
         for step in range(1, self.max_steps + 1):
