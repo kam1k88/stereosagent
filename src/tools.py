@@ -85,6 +85,35 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
         counts = [item for item in counts if item["applied_change_count"] >= min_changes]
         return {"proposed_changes": rows, "applied_change_counts": counts}
 
+    def find_early_deliveries(cutoff_date: str = "2026-04-01", as_of: str | None = None) -> dict[str, Any]:
+        cutoff = _parse_date(cutoff_date, date(2026, 4, 1))
+        review_date = _parse_date(as_of, as_of_date)
+        matches = []
+        for snapshot in engine.snapshots(review_date):
+            delivery = snapshot.delivery_date.value
+            if delivery is None or delivery >= cutoff:
+                continue
+            proposals = [
+                {
+                    "filename": item.filename,
+                    "proposed_value": item.proposed_value.isoformat()
+                    if hasattr(item.proposed_value, "isoformat") else item.proposed_value,
+                    "paragraph": item.evidence.paragraph_number,
+                    "quote": item.evidence.quote,
+                }
+                for item in snapshot.proposed_changes
+                if item.field_name == "delivery_date"
+            ]
+            matches.append({
+                "contract_number": snapshot.contract_number,
+                "supplier": snapshot.supplier,
+                "delivery_date": delivery.isoformat(),
+                "delivery_evidence": snapshot.delivery_date.evidence.to_dict()
+                if snapshot.delivery_date.evidence else None,
+                "unapproved_delivery_changes": proposals,
+            })
+        return {"cutoff_date": cutoff.isoformat(), "contracts": matches}
+
     def trace_field(contract_number: str, field_name: str, as_of: str | None = None) -> dict[str, Any]:
         result = engine.trace_field(contract_number, field_name, _parse_date(as_of, as_of_date))
         if field_name == "amount" and isinstance(result.get("result"), dict):
@@ -131,6 +160,14 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
             }, "required": []},
         }},
         {"type": "function", "function": {
+            "name": "find_early_deliveries",
+            "description": "Найти договоры с действующим сроком поставки раньше заданной даты и показать несогласованные предложения переноса.",
+            "parameters": {"type": "object", "properties": {
+                "cutoff_date": {"type": "string", "description": "Граница YYYY-MM-DD; по умолчанию 2026-04-01."},
+                "as_of": {"type": "string", "description": "Дата проверки YYYY-MM-DD."}
+            }, "required": []},
+        }},
+        {"type": "function", "function": {
             "name": "trace_field",
             "description": "Показать происхождение суммы или срока: базовое значение, применённые изменения, доказательства и причины проверки.",
             "parameters": {"type": "object", "properties": {
@@ -152,6 +189,7 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
         "search_contracts": search_contracts,
         "get_contract_snapshot": get_contract_snapshot,
         "analyze_contract_changes": analyze_contract_changes,
+        "find_early_deliveries": find_early_deliveries,
         "trace_field": trace_field,
         "get_source_evidence": get_source_evidence,
     }
