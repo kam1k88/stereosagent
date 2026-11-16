@@ -102,7 +102,7 @@ def extract_document(filename: str, raw: bytes) -> ParsedDocument:
     delivery_patterns = [
         rf"постав\w{{0,30}}?не\s+позднее\s+{DATE_RE}",
         rf"срок\s+поставки\s+(?:изменить\s+)?на\s+{DATE_RE}",
-        rf"перенести\s+срок\s+поставки\s+.{0,60}?\s+на\s+{DATE_RE}",
+        rf"перенести\s+срок\s+поставки\s+.{{0,60}}?\s+на\s+{DATE_RE}",
     ]
 
     fields: dict[str, Evidence] = {}
