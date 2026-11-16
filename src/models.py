@@ -86,6 +86,8 @@ class ContractSnapshot:
     delivery_date: ResolvedField
     related_documents: list[dict[str, Any]]
     proposed_changes: list[ProposedChange]
+    rule_set_id: str = "procurement_policy"
+    rule_version: int = 1
     issues: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -94,6 +96,8 @@ class ContractSnapshot:
             "supplier": self.supplier,
             "supplier_evidence": self.supplier_evidence.to_dict() if self.supplier_evidence else None,
             "as_of_date": self.as_of_date.isoformat(),
+            "rule_set_id": self.rule_set_id,
+            "rule_version": self.rule_version,
             "amount": self.amount.to_dict(),
             "delivery_date": self.delivery_date.to_dict(),
             "related_documents": self.related_documents,
