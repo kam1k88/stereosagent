@@ -70,6 +70,9 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
                 kop = row.pop("proposed_value")
                 row["proposed_value_kopecks"] = kop
                 row["proposed_value_rubles"] = _rubles(kop)
+                evidence = row.get("evidence") or {}
+                evidence["value_kopecks"] = evidence.pop("value", None)
+                evidence["value_rubles"] = _rubles(evidence["value_kopecks"])
         counts = []
         for number in engine.contract_numbers():
             if contract_number and number != contract_number.upper():
