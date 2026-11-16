@@ -68,7 +68,7 @@ def extract_document(filename: str, raw: bytes) -> ParsedDocument:
     supplier_evidence = _find_first(
         paragraphs,
         [r"Поставщик\s*:\s*([^\n.]+)"],
-        lambda x: x.strip().strip("«»\""),
+        lambda x: x.strip().replace("«", "").replace("»", "").strip().strip("\""),
         document_id,
         filename,
     )
