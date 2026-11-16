@@ -75,9 +75,16 @@ class LocalAgent:
         asks_percentage = "процент" in text or "%" in text
         asks_amount = any(token in text for token in ("сумм", "стоимост", "цен"))
         asks_change = any(token in text for token in (
-            "увелич", "уменьш", "измен", "рост", "снижен", "разниц", "динамик"
+            "увелич", "уменьш", "измен", "рост", "вырос", "снижен",
+            "сократ", "повыс", "разниц", "динамик"
         ))
-        if not (asks_percentage and asks_amount and asks_change):
+        if not asks_percentage:
+            return None
+        if not asks_amount:
+            return AgentResult(
+                answer="Уточните, какой показатель нужно посчитать в процентах: сумму договора, срок или другое значение.",
+            )
+        if not asks_change:
             return None
 
         match = re.search(r"\b(STN[-–]\d+)\b", user_text, flags=re.IGNORECASE)
