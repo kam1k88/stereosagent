@@ -349,17 +349,17 @@ class LocalAgent:
                     assessment = self._assess_answerability(user_text, candidate, trace)
                     answer = assessment.get("answer", candidate)
                     if assessment.get("status") == "partial":
-                        answer += "\\n\\n**Чего не хватает:**\\n" + "\\n".join(f"- {item}" for item in assessment.get("missing_information", []))
+                        answer += "\n\n**Чего не хватает:**\n" + "\n".join(f"- {item}" for item in assessment.get("missing_information", []))
                     elif assessment.get("status") == "unanswerable":
                         answer = (answer or "Не могу достоверно ответить на этот вопрос.")
                         if assessment.get("reason"):
-                            answer += "\\n\\n**Почему:** " + assessment["reason"]
+                            answer += "\n\n**Почему:** " + assessment["reason"]
                         if assessment.get("missing_information"):
-                            answer += "\\n\\n**Что требуется:**\\n" + "\\n".join(f"- {item}" for item in assessment["missing_information"])
+                            answer += "\n\n**Что требуется:**\n" + "\n".join(f"- {item}" for item in assessment["missing_information"])
                     return AgentResult(answer=answer, messages=messages, trace=trace, answerability=assessment)
                 except (requests.RequestException, ValueError, json.JSONDecodeError, TypeError) as exc:
                     return AgentResult(
-                        answer=(candidate + "\\n\\n_Не удалось проверить достаточность доказательств; "
+                        answer=(candidate + "\n\n_Не удалось проверить достаточность доказательств; "
                                 "ответ не прошёл дополнительную проверку._"),
                         messages=messages, trace=trace,
                         answerability={"status": "not_assessed", "reason": str(exc), "missing_information": []},
