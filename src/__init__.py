@@ -1,0 +1,1 @@
+"""Semantic TextNavigator local contract agent."""

@@ -1,0 +1,16 @@
+{
+  "rule_set_id": "procurement_policy",
+  "version": 1,
+  "amendment": {
+    "require_both_signatures": true,
+    "require_signature_date": true,
+    "require_effective_date": true,
+    "signature_date_lte_as_of": true,
+    "effective_date_lte_as_of": true
+  },
+  "non_binding_types": [
+    "amendment_draft",
+    "supplier_email"
+  ],
+  "conflict_strategy": "require_review"
+}
