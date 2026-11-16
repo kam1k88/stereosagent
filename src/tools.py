@@ -15,6 +15,24 @@ def _parse_date(value: str | None, default: date) -> date:
         raise ValueError("Дата должна быть в формате YYYY-MM-DD.") from exc
 
 
+def _rubles(kopecks: int | None) -> str | None:
+    if kopecks is None:
+        return None
+    whole, cents = divmod(kopecks, 100)
+    return f"{whole:,}".replace(",", " ") + (f",{cents:02d}" if cents else "") + " RUB"
+
+
+def _decorate_amount_field(field: dict[str, Any]) -> dict[str, Any]:
+    kop = field.pop("value", None)
+    field["value_kopecks"] = kop
+    field["value_rubles"] = _rubles(kop) if isinstance(kop, int) else None
+    if field.get("evidence"):
+        evidence = field["evidence"]
+        evidence["value_kopecks"] = evidence.pop("value", None)
+        evidence["value_rubles"] = _rubles(evidence["value_kopecks"])
+    return field
+
+
 def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], dict[str, Callable]]:
     """Return Ollama-compatible tool schemas and a strict allowlisted registry."""
 
@@ -22,7 +40,9 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
         return {"documents": engine.find_documents(query)}
 
     def get_contract_snapshot(contract_number: str, as_of: str | None = None) -> dict[str, Any]:
-        return engine.snapshot(contract_number, _parse_date(as_of, as_of_date)).to_dict()
+        data = engine.snapshot(contract_number, _parse_date(as_of, as_of_date)).to_dict()
+        data["amount"] = _decorate_amount_field(data["amount"])
+        return data
 
     def analyze_contract_changes(
         contract_number: str | None = None,
@@ -32,6 +52,11 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
         rows = engine.proposed_changes(contract_number, as_of_date)
         if field_name:
             rows = [row for row in rows if row["field"] == field_name]
+        for row in rows:
+            if row["field"] == "amount":
+                kop = row.pop("proposed_value")
+                row["proposed_value_kopecks"] = kop
+                row["proposed_value_rubles"] = _rubles(kop)
         counts = []
         for number in engine.contract_numbers():
             if contract_number and number != contract_number.upper():
@@ -48,7 +73,10 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
         return {"proposed_changes": rows, "applied_change_counts": counts}
 
     def trace_field(contract_number: str, field_name: str, as_of: str | None = None) -> dict[str, Any]:
-        return engine.trace_field(contract_number, field_name, _parse_date(as_of, as_of_date))
+        result = engine.trace_field(contract_number, field_name, _parse_date(as_of, as_of_date))
+        if field_name == "amount" and isinstance(result.get("result"), dict):
+            result["result"] = _decorate_amount_field(result["result"])
+        return result
 
     def get_source_evidence(document_id: str, paragraph_number: int) -> dict[str, Any]:
         doc = engine.get_document(document_id)
@@ -74,7 +102,7 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
         }},
         {"type": "function", "function": {
             "name": "get_contract_snapshot",
-            "description": "Получить действующие сумму и срок поставки договора на конкретную дату. Правила применяет детерминированный resolver. Не переопределяй его результат.",
+            "description": "Получить действующие сумму и срок поставки договора на конкретную дату. Сумма возвращается как value_rubles и value_kopecks. Правила применяет детерминированный resolver. Не переопределяй его результат.",
             "parameters": {"type": "object", "properties": {
                 "contract_number": {"type": "string"},
                 "as_of": {"type": "string", "description": "Дата YYYY-MM-DD; по умолчанию дата проверки интерфейса."}
@@ -82,7 +110,7 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
         }},
         {"type": "function", "function": {
             "name": "analyze_contract_changes",
-            "description": "Найти проекты и письма с предложенными изменениями, а также посчитать применённые изменения по полям.",
+            "description": "Найти проекты и письма с предложенными изменениями, а также посчитать применённые изменения по полям. Суммы указаны в RUB и копейках.",
             "parameters": {"type": "object", "properties": {
                 "contract_number": {"type": "string"},
                 "field_name": {"type": "string", "enum": ["amount", "delivery_date"]},
