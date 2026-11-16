@@ -26,7 +26,7 @@ def _is_applicable(doc: ParsedDocument, as_of: date, rules: dict[str, Any]) -> t
 def _resolve_field(base: ParsedDocument | None, amendments: list[ParsedDocument],
                    field_name: str, as_of: date, rules: dict[str, Any]) -> ResolvedField:
     result = ResolvedField()
-    if base and field_name in base.fields:
+    if base and base.signed_by_both is True and field_name in base.fields:
         result.value = base.fields[field_name].value
         result.evidence = base.fields[field_name]
         result.status = "resolved"
@@ -35,6 +35,9 @@ def _resolve_field(base: ParsedDocument | None, amendments: list[ParsedDocument]
             "value": result.value.isoformat() if hasattr(result.value, "isoformat") else result.value,
             "kind": "base_contract",
         })
+    elif base and base.signed_by_both is not True:
+        result.status = "needs_review"
+        result.issues.append("Не подтверждено подписание базового договора обеими сторонами.")
     elif base:
         result.status = "not_found"
 
@@ -46,8 +49,16 @@ def _resolve_field(base: ParsedDocument | None, amendments: list[ParsedDocument]
         if applicable:
             candidates.append((doc, doc.fields[field_name]))
         elif doc.document_type == "amendment_signed":
-            result.issues.append(f"{doc.filename}: {reason}")
-            result.status = "needs_review"
+            # A clearly future-dated agreement is simply not effective yet.
+            future_dated = (
+                doc.signed_by_both is True
+                and doc.signature_date is not None
+                and doc.effective_date is not None
+                and (doc.signature_date > as_of or doc.effective_date > as_of)
+            )
+            if not future_dated:
+                result.issues.append(f"{doc.filename}: {reason}")
+                result.status = "needs_review"
 
     candidates.sort(key=lambda pair: (pair[0].effective_date or date.min,
                                       pair[0].signature_date or date.min,
