@@ -239,3 +239,45 @@ def test_tool_snapshot_uses_ui_review_date_not_model_supplied_date():
     assert result["as_of_date"] == "2026-03-10"
     assert result["amount"]["value_rubles"] == "1 380 000 RUB"
     assert result["delivery_date"]["value"] == "2026-04-30"
+
+
+def test_dispatcher_ignores_undeclared_tool_arguments_and_uses_workflow_date():
+    engine = sample_engine()
+    agent = LocalAgent()
+    calls = []
+
+    def fake_chat(messages, schemas):
+        calls.append(list(messages))
+        if len(calls) == 1:
+            return {"message": {
+                "role": "assistant",
+                "tool_calls": [{
+                    "function": {
+                        "name": "get_contract_snapshot",
+                        "arguments": {
+                            "contract_number": "STN-102",
+                            "field_name": "delivery_date",
+                            "date": "2023-07-15",
+                        },
+                    }
+                }],
+            }}
+        return {"message": {"role": "assistant", "content": "Срок поставки получен из инструмента."}}
+
+    agent._chat = fake_chat
+    agent._assess_answerability = lambda question, candidate, trace: {
+        "status": "answerable",
+        "answer": candidate,
+        "reason": "",
+        "missing_information": [],
+    }
+
+    result = agent.run("Какой срок поставки по STN-102?", engine, date(2026, 3, 10))
+
+    assert result.trace[0]["tool"] == "get_contract_snapshot"
+    assert result.trace[0]["executed_arguments"] == {"contract_number": "STN-102"}
+    assert result.trace[0]["ignored_arguments"] == ["date", "field_name"]
+    assert result.trace[0]["result"]["as_of_date"] == "2026-03-10"
+    assert result.trace[0]["result"]["delivery_date"]["value"] == "2026-03-20"
+    tool_message = next(message for message in calls[1] if message.get("role") == "tool")
+    assert '"ignored_arguments": ["date", "field_name"]' in tool_message["content"]
