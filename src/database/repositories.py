@@ -198,22 +198,48 @@ class PostgresRepository:
             for document in documents:
                 ids[document.document_id] = self.persist_document(document)
 
-            base_documents = {
-                document.contract_number: document
-                for document in documents
-                if document.contract_number and document.document_type == "contract"
-            }
+            base_documents: dict[str, list[ParsedDocument]] = {}
+            for item in documents:
+                if item.contract_number and item.document_type == "contract":
+                    base_documents.setdefault(item.contract_number, []).append(item)
+
             for document in documents:
-                base = base_documents.get(document.contract_number)
-                if not base or base.document_id == document.document_id:
-                    continue
                 relation = {
                     "amendment_signed": "amends",
                     "amendment_draft": "amends",
                     "supplier_email": "correspondence_about",
                     "appendix": "appendix_of",
                 }.get(document.document_type)
-                if relation:
-                    self.link_documents(ids[document.document_id], ids[base.document_id], relation)
+                if not relation or not document.contract_number:
+                    continue
+
+                bases = base_documents.get(document.contract_number, [])
+                if len(bases) > 1:
+                    # Preserve the resolver's ambiguity instead of linking arbitrarily.
+                    continue
+                if len(bases) == 1:
+                    base_db_id = ids[bases[0].document_id]
+                else:
+                    # Supports incremental uploads where the base contract was
+                    # persisted in an earlier Streamlit session/rerun.
+                    rows = self.connection.execute(
+                        """
+                        SELECT d.id
+                        FROM documents AS d
+                        JOIN contracts AS c ON c.id = d.contract_id
+                        WHERE c.contract_number = %s
+                          AND d.document_type = 'contract'
+                        ORDER BY d.id
+                        LIMIT 2
+                        """,
+                        (document.contract_number,),
+                    ).fetchall()
+                    if len(rows) != 1:
+                        continue
+                    base_db_id = rows[0][0]
+
+                source_db_id = ids[document.document_id]
+                if source_db_id != base_db_id:
+                    self.link_documents(source_db_id, base_db_id, relation)
 
         return ids
