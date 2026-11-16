@@ -73,7 +73,7 @@ class LocalAgent:
     def _percentage_change_route(self, user_text: str, engine: ContractEngine, as_of_date) -> AgentResult | None:
         text = user_text.casefold()
         asks_percentage = "процент" in text or "%" in text
-        asks_amount = bool(re.search(r"\\b(?:сумм\\w*|стоимост\\w*|цен(?:а|у|ы|е|ой|ами|ах)?)\\b", text))
+        asks_amount = bool(re.search(r"\b(?:сумм\w*|стоимост\w*|цен(?:а|у|ы|е|ой|ами|ах)?)\b", text))
         asks_change = any(token in text for token in (
             "увелич", "уменьш", "измен", "рост", "вырос", "снижен",
             "сократ", "повыс", "разниц", "динамик"
