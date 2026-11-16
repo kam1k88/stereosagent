@@ -26,6 +26,7 @@ def _is_applicable(doc: ParsedDocument, as_of: date, rules: dict[str, Any]) -> t
 def _resolve_field(base: ParsedDocument | None, amendments: list[ParsedDocument],
                    field_name: str, as_of: date, rules: dict[str, Any]) -> ResolvedField:
     result = ResolvedField()
+    blocking_review = False
     if base and base.signed_by_both is True and field_name in base.fields:
         result.value = base.fields[field_name].value
         result.evidence = base.fields[field_name]
@@ -36,6 +37,7 @@ def _resolve_field(base: ParsedDocument | None, amendments: list[ParsedDocument]
             "kind": "base_contract",
         })
     elif base and base.signed_by_both is not True:
+        blocking_review = True
         result.status = "needs_review"
         result.issues.append("Не подтверждено подписание базового договора обеими сторонами.")
     elif base:
@@ -57,6 +59,7 @@ def _resolve_field(base: ParsedDocument | None, amendments: list[ParsedDocument]
                 and (doc.signature_date > as_of or doc.effective_date > as_of)
             )
             if not future_dated:
+                blocking_review = True
                 result.issues.append(f"{doc.filename}: {reason}")
                 result.status = "needs_review"
 
@@ -67,6 +70,9 @@ def _resolve_field(base: ParsedDocument | None, amendments: list[ParsedDocument]
     for left, right in zip(candidates, candidates[1:]):
         if (left[0].effective_date, left[0].signature_date) == (right[0].effective_date, right[0].signature_date):
             if left[1].value != right[1].value:
+                result.value = None
+                result.evidence = None
+                result.changed_by = None
                 result.status = "needs_review"
                 result.issues.append("Найдены противоречащие изменения с одинаковыми датами.")
                 return result
@@ -83,6 +89,12 @@ def _resolve_field(base: ParsedDocument | None, amendments: list[ParsedDocument]
             "kind": "applicable_amendment",
             "effective_date": doc.effective_date.isoformat() if doc.effective_date else None,
         })
+
+    if blocking_review:
+        result.value = None
+        result.evidence = None
+        result.changed_by = None
+        result.status = "needs_review"
     return result
 
 
