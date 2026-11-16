@@ -52,7 +52,7 @@ def extract_document(filename: str, raw: bytes) -> ParsedDocument:
     original = decode_text(raw)
     text = normalize_text(original)
     paragraphs = split_paragraphs(text)
-    digest = sha256(raw)
+    digest = sha256(text.encode("utf-8"))
     document_id = digest[:12]
     doc_type = classify_document(text)
 
