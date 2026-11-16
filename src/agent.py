@@ -34,6 +34,7 @@ class AgentResult:
     answer: str
     messages: list[dict[str, Any]] = field(default_factory=list)
     trace: list[dict[str, Any]] = field(default_factory=list)
+    options: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _format_rubles(kopecks: int) -> str:
@@ -69,6 +70,116 @@ class LocalAgent:
         )
         response.raise_for_status()
         return response.json()
+
+    def _generate_cost_options(self, contract_number: str, engine: ContractEngine, as_of_date) -> AgentResult:
+        """Generate explicitly hypothetical pricing scenarios; never alter contract facts."""
+        snapshot = engine.snapshot(contract_number, as_of_date)
+        if snapshot.amount.value is not None:
+            return AgentResult(
+                answer=(f"По {contract_number} уже определена действующая сумма "
+                        f"{_format_rubles(snapshot.amount.value)}. Если нужна альтернативная "
+                        "цена, уточните, требуется ли сравнить её с действующей суммой или "
+                        "подготовить коммерческое предложение."),
+            )
+        context = {
+            "contract_number": contract_number,
+            "supplier": snapshot.supplier,
+            "amount_status": snapshot.amount.status,
+            "amount_issues": snapshot.amount.issues,
+            "delivery_date": snapshot.delivery_date.value.isoformat() if snapshot.delivery_date.value else None,
+            "delivery_status": snapshot.delivery_date.status,
+            "related_documents": snapshot.related_documents,
+            "important_constraint": (
+                "В договоре нет числовой цены; стоимость определяется отсутствующей спецификацией. "
+                "Внутренний бюджетный лимит 600000 RUB не является ценой и не должен использоваться "
+                "как исходная цена, потолок или доказательство."
+            ),
+        }
+        schema = {
+            "type": "object",
+            "properties": {
+                "options": {
+                    "type": "array", "minItems": 3, "maxItems": 3,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "label": {"type": "string"},
+                            "amount_rub": {"type": "number", "minimum": 1},
+                            "rationale": {"type": "string"},
+                            "assumptions": {"type": "array", "items": {"type": "string"}},
+                            "risks": {"type": "string"}
+                        },
+                        "required": ["label", "amount_rub", "rationale", "assumptions", "risks"]
+                    }
+                },
+                "limitations": {"type": "string"}
+            },
+            "required": ["options", "limitations"]
+        }
+        prompt = (
+            "Ты помощник специалиста по закупкам. Подготовь ровно три предварительных "
+            "ценовых сценария для планирования, а не фактическую цену договора. "
+            "Данные договора могут быть неполными. Не выдавай предположения за рыночные "
+            "котировки или сведения из документов. Не выводи цену из бюджетного лимита. "
+            "Сделай сценарии экономный, базовый и с резервом; укажи конкретные допущения, "
+            "почему сумма условна и что нужно запросить у поставщика для проверки. "
+            "Если исходных данных недостаточно, всё равно предложи только иллюстративные "
+            "сценарии и явно укажи низкую надёжность. Валюта — RUB. Ответ строго по JSON schema.\n\n"
+            f"Контекст: {json.dumps(context, ensure_ascii=False, default=str)}"
+        )
+        response = requests.post(
+            f"{self.host}/api/chat",
+            json={
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": "Возвращай только валидный JSON по заданной схеме. Не выдумывай факты о документах."},
+                    {"role": "user", "content": prompt},
+                ],
+                "format": schema,
+                "stream": False,
+                "options": {"temperature": 0.35},
+            },
+            timeout=(5, 180),
+        )
+        response.raise_for_status()
+        payload = response.json().get("message", {}).get("content", "")
+        try:
+            parsed = json.loads(payload)
+            options = parsed.get("options", [])
+            if len(options) != 3:
+                raise ValueError("Ожидалось ровно три сценария.")
+            for item in options:
+                amount = item.get("amount_rub")
+                if not isinstance(amount, (int, float)) or isinstance(amount, bool) or amount <= 0:
+                    raise ValueError("Некорректная сумма в варианте.")
+                if not all(isinstance(item.get(key), str) and item[key].strip() for key in ("label", "rationale", "risks")):
+                    raise ValueError("В варианте отсутствует пояснение.")
+                if not isinstance(item.get("assumptions"), list):
+                    raise ValueError("Некорректный список допущений.")
+        except (json.JSONDecodeError, TypeError, ValueError, AttributeError) as exc:
+            return AgentResult(answer=f"Модель не смогла сформировать три проверяемых варианта в заданном формате: {exc}. Попробуйте ещё раз.")
+
+        return AgentResult(
+            answer=(f"Для **{contract_number}** подготовлены три предварительных сценария. "
+                    "Это гипотезы для обсуждения, а не цена из договора и не рыночная котировка. "
+                    "Выбор сохранится только как решение пользователя и не изменит условия договора.\n\n"
+                    f"Ограничение: {parsed.get('limitations', 'Для проверки нужна спецификация от поставщика.')}"),
+            options=options,
+        )
+
+    def _cost_proposal_route(self, user_text: str, engine: ContractEngine, as_of_date) -> AgentResult | None:
+        text = user_text.casefold()
+        asks_to_propose = any(token in text for token in ("предложи", "предложить", "оцени", "оценить", "прикинь", "рассчитай"))
+        asks_cost = any(token in text for token in ("стоимост", "цен", "сумм"))
+        if not (asks_to_propose and asks_cost):
+            return None
+        match = re.search(r"\\b(STN[-–]\\d+)\\b", user_text, flags=re.IGNORECASE)
+        if not match:
+            return AgentResult(answer="Уточните номер договора, для которого нужно подготовить предварительные варианты стоимости.")
+        contract_number = match.group(1).replace("–", "-").upper()
+        if contract_number not in engine.contract_numbers():
+            return AgentResult(answer=f"Договор {contract_number} не найден в загруженном комплекте документов.")
+        return self._generate_cost_options(contract_number, engine, as_of_date)
 
     def _percentage_change_route(self, user_text: str, engine: ContractEngine, as_of_date) -> AgentResult | None:
         text = user_text.casefold()
@@ -155,6 +266,9 @@ class LocalAgent:
 
     def run(self, user_text: str, engine: ContractEngine, as_of_date,
             history: list[dict] | None = None) -> AgentResult:
+        cost_proposal = self._cost_proposal_route(user_text, engine, as_of_date)
+        if cost_proposal is not None:
+            return cost_proposal
         deterministic = self._percentage_change_route(user_text, engine, as_of_date)
         if deterministic is not None:
             return deterministic
