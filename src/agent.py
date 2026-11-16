@@ -173,9 +173,11 @@ class LocalAgent:
         asks_cost = any(token in text for token in ("стоимост", "цен", "сумм"))
         if not (asks_to_propose and asks_cost):
             return None
-        match = re.search(r"\\b(STN[-–]\\d+)\\b", user_text, flags=re.IGNORECASE)
+        match = re.search(r"\b(STN[-–]\d+|(?<!\w)\d{3}(?!\w))\b", user_text, flags=re.IGNORECASE)
         if not match:
             return AgentResult(answer="Уточните номер договора, для которого нужно подготовить предварительные варианты стоимости.")
+        raw_number = match.group(1).replace("–", "-").upper()
+        contract_number = raw_number if raw_number.startswith("STN-") else f"STN-{raw_number}"
         contract_number = match.group(1).replace("–", "-").upper()
         if contract_number not in engine.contract_numbers():
             return AgentResult(answer=f"Договор {contract_number} не найден в загруженном комплекте документов.")
