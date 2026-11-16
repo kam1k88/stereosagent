@@ -61,3 +61,17 @@ def test_trace_field_returns_evidence_for_base_and_applied_amendment():
     assert [item["value"] for item in field["history"]] == [120_000_000, 138_000_000]
     assert field["history"][0]["evidence"]["filename"] == "01_contract.txt"
     assert field["history"][1]["evidence"]["filename"] == "02_amendment_signed.txt"
+
+
+def test_vague_percentage_request_asks_what_to_calculate():
+    engine = sample_engine()
+    agent = LocalAgent()
+
+    def unexpected_llm_call(*args, **kwargs):
+        raise AssertionError("Vague percentage requests must be clarified without Ollama.")
+
+    agent._chat = unexpected_llm_call
+    result = agent.run("Посчитай ченить в процентах", engine, date(2026, 3, 10))
+
+    assert "какой показатель" in result.answer
+    assert result.trace == []
