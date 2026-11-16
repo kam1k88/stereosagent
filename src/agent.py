@@ -178,7 +178,6 @@ class LocalAgent:
             return AgentResult(answer="Уточните номер договора, для которого нужно подготовить предварительные варианты стоимости.")
         raw_number = match.group(1).replace("–", "-").upper()
         contract_number = raw_number if raw_number.startswith("STN-") else f"STN-{raw_number}"
-        contract_number = match.group(1).replace("–", "-").upper()
         if contract_number not in engine.contract_numbers():
             return AgentResult(answer=f"Договор {contract_number} не найден в загруженном комплекте документов.")
         return self._generate_cost_options(contract_number, engine, as_of_date)
