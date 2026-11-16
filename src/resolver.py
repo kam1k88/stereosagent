@@ -33,6 +33,7 @@ def _resolve_field(base: ParsedDocument | None, amendments: list[ParsedDocument]
         result.status = "resolved"
         result.history.append({
             "source": base.filename,
+            "document_id": base.document_id,
             "value": result.value.isoformat() if hasattr(result.value, "isoformat") else result.value,
             "kind": "base_contract",
         })
@@ -84,6 +85,7 @@ def _resolve_field(base: ParsedDocument | None, amendments: list[ParsedDocument]
         result.change_count += 1
         result.history.append({
             "source": doc.filename,
+            "document_id": doc.document_id,
             "value": evidence.value.isoformat() if hasattr(evidence.value, "isoformat") else evidence.value,
             "kind": "applicable_amendment",
             "effective_date": doc.effective_date.isoformat() if doc.effective_date else None,

@@ -36,6 +36,31 @@ def evidence_markdown(field, label: str) -> None:
     st.markdown(f'<a href="#{anchor}">Перейти к исходному абзацу ↓</a>', unsafe_allow_html=True)
 
 
+def render_cost_options(options: list[dict], message_index: int) -> None:
+    if not options:
+        return
+    st.markdown("**Варианты предварительной стоимости**")
+    columns = st.columns(len(options))
+    for index, (column, option) in enumerate(zip(columns, options)):
+        with column:
+            st.markdown(f"**{option['label']}**")
+            st.subheader(f"{option['amount_rub']:,.0f} ₽".replace(",", " "))
+            st.write(option["rationale"])
+            with st.expander("Допущения и риски"):
+                for assumption in option["assumptions"]:
+                    st.write(f"• {assumption}")
+                st.warning(option["risks"])
+            if st.button("Выбрать вариант", key=f"cost_option_{message_index}_{index}", use_container_width=True):
+                st.session_state[f"selected_cost_option_{message_index}"] = option
+                st.session_state[f"selected_cost_option_notice_{message_index}"] = True
+    selected = st.session_state.get(f"selected_cost_option_{message_index}")
+    if selected:
+        st.success(
+            f"Вы выбрали: {selected['label']} — {selected['amount_rub']:,.0f} ₽. "
+            "Это предварительный вариант для обсуждения; договор не изменён."
+        )
+
+
 def quick_answer(engine: ContractEngine, question_id: int, as_of: date) -> str:
     if question_id == 1:
         snap = engine.snapshot("STN-101", as_of)
@@ -212,14 +237,19 @@ with tab_overview:
 with tab_chat:
     st.subheader("Задайте вопрос о загруженных договорах")
     st.caption(
-        "Агент использует только семь разрешённых инструментов. Бизнес-правила "
-        "и определение действующих условий выполняет Python workflow, а не LLM."
+        "Агент использует семь разрешённых инструментов. Бизнес-правила и определение "
+        "действующих условий выполняет Python workflow; предварительные варианты стоимости "
+        "LLM генерирует отдельно, а пользователь подтверждает выбор."
     )
     if "chat_messages" not in st.session_state:
         st.session_state.chat_messages = []
     for item in st.session_state.chat_messages:
         with st.chat_message(item["role"]):
             st.markdown(item["content"])
+            if item.get("options"):
+                render_cost_options(item["options"], item.get("message_index", 0))
+            if item.get("answerability", {}).get("status") in ("partial", "unanswerable"):
+                st.info("Проверка достаточности данных: " + item["answerability"]["status"])
             if item.get("trace"):
                 with st.expander("Трассировка инструментов"):
                     for event in item["trace"]:
@@ -235,27 +265,31 @@ with tab_chat:
             with st.spinner(f"Агент обращается к {ollama_model}..."):
                 try:
                     agent = LocalAgent(host=ollama_host, model=ollama_model, max_steps=5)
-                    history = [
-                        {"role": m["role"], "content": m["content"]}
-                        for m in st.session_state.chat_messages[:-1]
-                    ]
-                    result = agent.run(prompt, engine, as_of, history)
-                    if not result.trace:
+                    # Chat history is displayed in the UI but is not sent to factual
+                    # tool planning: each contract question must stand on its own evidence.
+                    result = agent.run(prompt, engine, as_of)
+                    if not result.trace and result.messages and result.answerability.get("status") == "not_assessed":
                         answer = (
-                            "Модель не вызвала ни одного инструмента. Чтобы не выдавать "
-                            "непроверенный ответ о договоре, я не буду считать ответ подтверждённым. "
-                            "Уточните номер договора или переформулируйте вопрос."
+                            "Модель не вызвала инструмент, а автоматическая проверка достаточности "
+                            "доказательств не завершилась. Ответ не подтверждён. Повторите вопрос; "
+                            "для точной суммы или срока можно воспользоваться быстрыми проверками "
+                            "на вкладке «Обзор договоров»."
                         )
                     else:
                         answer = result.answer
                     st.markdown(answer)
+                    message_index = len(st.session_state.chat_messages)
+                    if result.options:
+                        render_cost_options(result.options, message_index)
                     if result.trace:
                         with st.expander("Трассировка инструментов"):
                             for event in result.trace:
                                 st.markdown(f"**Шаг {event['step']} · {event['tool']}**")
                                 st.json({"arguments": event["arguments"], "result": event["result"]})
                     st.session_state.chat_messages.append({
-                        "role": "assistant", "content": answer, "trace": result.trace
+                        "role": "assistant", "content": answer, "trace": result.trace,
+                        "options": result.options, "message_index": message_index,
+                        "answerability": result.answerability
                     })
                 except Exception as exc:
                     message = (

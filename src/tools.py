@@ -45,7 +45,8 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
         return {"documents": engine.find_documents(query)}
 
     def get_contract_snapshot(contract_number: str, as_of: str | None = None) -> dict[str, Any]:
-        data = engine.snapshot(contract_number, _parse_date(as_of, as_of_date)).to_dict()
+        # The review date is controlled by the UI/workflow, never by model-generated tool arguments.
+        data = engine.snapshot(contract_number, as_of_date).to_dict()
         data["amount"] = _decorate_amount_field(data["amount"])
         for change in data.get("proposed_changes", []):
             if change["field_name"] == "amount":
@@ -110,7 +111,8 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
 
     def find_early_deliveries(cutoff_date: str = "2026-04-01", as_of: str | None = None) -> dict[str, Any]:
         cutoff = _parse_date(cutoff_date, date(2026, 4, 1))
-        review_date = _parse_date(as_of, as_of_date)
+        # The review date is controlled by the UI/workflow, never by model-generated tool arguments.
+        review_date = as_of_date
         matches = []
         for snapshot in engine.snapshots(review_date):
             delivery = snapshot.delivery_date.value
@@ -138,7 +140,8 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
         return {"cutoff_date": cutoff.isoformat(), "contracts": matches}
 
     def trace_field(contract_number: str, field_name: str, as_of: str | None = None) -> dict[str, Any]:
-        result = engine.trace_field(contract_number, field_name, _parse_date(as_of, as_of_date))
+        # The review date is controlled by the UI/workflow, never by model-generated tool arguments.
+        result = engine.trace_field(contract_number, field_name, as_of_date)
         if field_name == "amount" and isinstance(result.get("result"), dict):
             result["result"] = _decorate_amount_field(result["result"])
         return result
@@ -170,7 +173,6 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
             "description": "Получить действующие сумму и срок поставки договора на конкретную дату. Сумма возвращается как value_rubles и value_kopecks. Правила применяет детерминированный resolver. Не переопределяй его результат.",
             "parameters": {"type": "object", "properties": {
                 "contract_number": {"type": "string"},
-                "as_of": {"type": "string", "description": "Дата YYYY-MM-DD; по умолчанию дата проверки интерфейса."}
             }, "required": ["contract_number"]},
         }},
         {"type": "function", "function": {
@@ -197,7 +199,6 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
             "description": "Найти договоры с действующим сроком поставки раньше заданной даты и показать несогласованные предложения переноса.",
             "parameters": {"type": "object", "properties": {
                 "cutoff_date": {"type": "string", "description": "Граница YYYY-MM-DD; по умолчанию 2026-04-01."},
-                "as_of": {"type": "string", "description": "Дата проверки YYYY-MM-DD."}
             }, "required": []},
         }},
         {"type": "function", "function": {
@@ -206,7 +207,6 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
             "parameters": {"type": "object", "properties": {
                 "contract_number": {"type": "string"},
                 "field_name": {"type": "string", "enum": ["amount", "delivery_date"]},
-                "as_of": {"type": "string", "description": "Дата YYYY-MM-DD."}
             }, "required": ["contract_number", "field_name"]},
         }},
         {"type": "function", "function": {

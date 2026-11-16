@@ -41,9 +41,34 @@ class ContractEngine:
     def snapshot(self, contract_number: str, as_of: date):
         return resolve_contract(contract_number.upper(), self.documents, as_of, self.rules)
 
+    def trace_field(self, contract_number: str, field_name: str, as_of: date) -> dict:
+        """Return the resolved field and evidence for every value in its applied history."""
+        if field_name not in ("amount", "delivery_date"):
+            raise ValueError("Поддерживаются только amount и delivery_date.")
+
+        snapshot = self.snapshot(contract_number, as_of)
+        resolved = getattr(snapshot, field_name)
+        history = []
+        for item in resolved.history:
+            row = dict(item)
+            source_doc = next(
+                (doc for doc in self.documents
+                 if doc.document_id == item.get("document_id")),
+                None,
+            )
+            evidence = source_doc.fields.get(field_name) if source_doc else None
+            row["evidence"] = evidence.to_dict() if evidence else None
+            history.append(row)
+
+        result = resolved.to_dict()
+        result["history"] = history
+        result["contract_number"] = snapshot.contract_number
+        result["field_name"] = field_name
+        result["as_of_date"] = as_of.isoformat()
+        return {"status": "ok", "result": result}
+
     def party_role(self, contract_number: str, party_name: str | None) -> str:
         return resolve_party_role(contract_number, party_name, self.documents)
-
 
     def find_documents(self, query: str = "") -> list[dict]:
         q = query.casefold().strip()
@@ -91,7 +116,6 @@ class ContractEngine:
                 recipient = doc.recipient if doc else None
                 initiator_role = self.party_role(snapshot.contract_number, initiator)
                 recipient_role = self.party_role(snapshot.contract_number, recipient)
-                # Only explicitly non-binding documents are surfaced as proposals.
                 row = {
                     "contract_number": item.contract_number,
                     "filename": item.filename,
