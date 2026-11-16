@@ -30,6 +30,11 @@ def _decorate_amount_field(field: dict[str, Any]) -> dict[str, Any]:
         evidence = field["evidence"]
         evidence["value_kopecks"] = evidence.pop("value", None)
         evidence["value_rubles"] = _rubles(evidence["value_kopecks"])
+    for item in field.get("history", []):
+        if isinstance(item.get("value"), int):
+            kop_value = item.pop("value")
+            item["value_kopecks"] = kop_value
+            item["value_rubles"] = _rubles(kop_value)
     return field
 
 
@@ -42,6 +47,14 @@ def build_tools(engine: ContractEngine, as_of_date: date) -> tuple[list[dict], d
     def get_contract_snapshot(contract_number: str, as_of: str | None = None) -> dict[str, Any]:
         data = engine.snapshot(contract_number, _parse_date(as_of, as_of_date)).to_dict()
         data["amount"] = _decorate_amount_field(data["amount"])
+        for change in data.get("proposed_changes", []):
+            if change["field_name"] == "amount":
+                kop = change.pop("proposed_value")
+                change["proposed_value_kopecks"] = kop
+                change["proposed_value_rubles"] = _rubles(kop)
+                evidence = change.get("evidence") or {}
+                evidence["value_kopecks"] = evidence.pop("value", None)
+                evidence["value_rubles"] = _rubles(evidence["value_kopecks"])
         return data
 
     def analyze_contract_changes(
