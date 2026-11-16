@@ -281,3 +281,34 @@ def test_dispatcher_ignores_undeclared_tool_arguments_and_uses_workflow_date():
     assert result.trace[0]["result"]["delivery_date"]["value"] == "2026-03-20"
     tool_message = next(message for message in calls[1] if message.get("role") == "tool")
     assert '"ignored_arguments": ["date", "field_name"]' in tool_message["content"]
+
+
+def test_tool_execution_failure_is_not_reported_as_missing_contract_data():
+    engine = sample_engine()
+    agent = LocalAgent()
+    calls = []
+
+    def fake_chat(messages, schemas):
+        calls.append(list(messages))
+        if len(calls) == 1:
+            return {"message": {
+                "role": "assistant",
+                "tool_calls": [{
+                    "function": {
+                        "name": "get_contract_snapshot",
+                        "arguments": {},
+                    }
+                }],
+            }}
+        return {"message": {"role": "assistant", "content": "Не удалось получить сведения."}}
+
+    def unexpected_assessment(*args, **kwargs):
+        raise AssertionError("Tool execution failures must not be assessed as missing data.")
+
+    agent._chat = fake_chat
+    agent._assess_answerability = unexpected_assessment
+    result = agent.run("Какой срок поставки по STN-102?", engine, date(2026, 3, 10))
+
+    assert result.answerability["status"] == "not_assessed"
+    assert "не означает, что сведения отсутствуют" in result.answer
+    assert result.trace[0]["result"]["status"] == "invalid_arguments"
