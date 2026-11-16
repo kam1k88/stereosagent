@@ -34,7 +34,7 @@ streamlit run app.py
 
 ## Архитектура
 
-Streamlit Chat → собственный Local Agent Runtime → Ollama /api/chat (native tool calling) → шесть allowlisted Python Tools → Domain Workflows → Evidence + Contract Snapshot. Hermes/MCP не используются: runtime и registry инструментов принадлежат приложению.
+Streamlit Chat → собственный Local Agent Runtime → Ollama /api/chat (native tool calling) → семь allowlisted Python Tools → Domain Workflows → Evidence + Contract Snapshot. Hermes/MCP не используются: runtime и registry инструментов принадлежат приложению.
 
 Обработка документа: ingestion/normalization → classification → extraction → evidence. Resolver применяет версионируемые правила из config/rules.json. LLM не определяет юридическую применимость изменений. MCP/Hermes, vector DB и платные API не требуются.
 
