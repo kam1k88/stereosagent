@@ -6,6 +6,7 @@ from typing import Iterable
 
 from .extractor import extract_document
 from .models import ParsedDocument
+from .party_roles import resolve_party_role
 from .resolver import resolve_contract
 from .rules import load_rules
 
@@ -40,11 +41,18 @@ class ContractEngine:
     def snapshot(self, contract_number: str, as_of: date):
         return resolve_contract(contract_number.upper(), self.documents, as_of, self.rules)
 
+    def party_role(self, contract_number: str, party_name: str | None) -> str:
+        return resolve_party_role(contract_number, party_name, self.documents)
+
+
     def find_documents(self, query: str = "") -> list[dict]:
         q = query.casefold().strip()
         results = []
         for doc in self.documents:
-            haystack = " ".join([doc.filename, doc.contract_number or "", doc.supplier or "", doc.text]).casefold()
+            haystack = " ".join([
+                doc.filename, doc.contract_number or "", doc.supplier or "",
+                doc.buyer or "", doc.sender or "", doc.recipient or "", doc.text
+            ]).casefold()
             if not q or q in haystack:
                 results.append({
                     "document_id": doc.document_id,
@@ -52,6 +60,9 @@ class ContractEngine:
                     "type": doc.document_type,
                     "contract_number": doc.contract_number,
                     "supplier": doc.supplier,
+                    "buyer": doc.buyer,
+                    "sender": doc.sender,
+                    "recipient": doc.recipient,
                     "issues": doc.issues,
                 })
         return results
@@ -59,32 +70,43 @@ class ContractEngine:
     def get_document(self, document_id: str):
         return next((d for d in self.documents if d.document_id == document_id), None)
 
-    def proposed_changes(self, contract_number: str | None, as_of: date) -> list[dict]:
+    def proposed_changes(
+        self,
+        contract_number: str | None,
+        as_of: date,
+        field_name: str | None = None,
+        party_role: str | None = None,
+        status: str = "PROPOSED",
+    ) -> list[dict]:
         snapshots = self.snapshots(as_of)
         if contract_number:
             snapshots = [s for s in snapshots if s.contract_number == contract_number.upper()]
         rows = []
         for snapshot in snapshots:
             for item in snapshot.proposed_changes:
-                value = item.proposed_value.isoformat() if hasattr(item.proposed_value, "isoformat") else item.proposed_value
-                rows.append({
+                if field_name and item.field_name != field_name:
+                    continue
+                doc = self.get_document(item.evidence.document_id)
+                initiator = doc.sender if doc else None
+                recipient = doc.recipient if doc else None
+                initiator_role = self.party_role(snapshot.contract_number, initiator)
+                recipient_role = self.party_role(snapshot.contract_number, recipient)
+                # Only explicitly non-binding documents are surfaced as proposals.
+                row = {
                     "contract_number": item.contract_number,
                     "filename": item.filename,
                     "document_type": item.document_type,
                     "field": item.field_name,
-                    "proposed_value": value,
+                    "proposed_value": item.proposed_value.isoformat()
+                    if hasattr(item.proposed_value, "isoformat") else item.proposed_value,
                     "evidence": item.evidence.to_dict(),
-                })
+                    "initiator": initiator,
+                    "initiator_role": initiator_role,
+                    "recipient": recipient,
+                    "recipient_role": recipient_role,
+                    "status": status,
+                }
+                if party_role and initiator_role != party_role:
+                    continue
+                rows.append(row)
         return rows
-
-    def trace_field(self, contract_number: str, field_name: str, as_of: date) -> dict:
-        snapshot = self.snapshot(contract_number, as_of)
-        if field_name not in ("amount", "delivery_date"):
-            return {"status": "unsupported_field", "message": "Поддерживаются amount и delivery_date."}
-        field = snapshot.amount if field_name == "amount" else snapshot.delivery_date
-        return {
-            "contract_number": contract_number.upper(),
-            "field": field_name,
-            "result": field.to_dict(),
-            "contract_issues": snapshot.issues,
-        }
