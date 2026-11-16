@@ -265,11 +265,9 @@ with tab_chat:
             with st.spinner(f"Агент обращается к {ollama_model}..."):
                 try:
                     agent = LocalAgent(host=ollama_host, model=ollama_model, max_steps=5)
-                    history = [
-                        {"role": m["role"], "content": m["content"]}
-                        for m in st.session_state.chat_messages[:-1]
-                    ]
-                    result = agent.run(prompt, engine, as_of, history)
+                    # Chat history is displayed in the UI but is not sent to factual
+                    # tool planning: each contract question must stand on its own evidence.
+                    result = agent.run(prompt, engine, as_of)
                     if not result.trace and result.messages and result.answerability.get("status") == "not_assessed":
                         answer = (
                             "Модель не вызвала ни одного инструмента. Чтобы не выдавать "
