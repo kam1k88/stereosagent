@@ -74,7 +74,10 @@ class LocalAgent:
         text = user_text.casefold()
         asks_percentage = "процент" in text or "%" in text
         asks_amount = any(token in text for token in ("сумм", "стоимост", "цен"))
-        if not (asks_percentage and asks_amount):
+        asks_change = any(token in text for token in (
+            "увелич", "уменьш", "измен", "рост", "снижен", "разниц", "динамик"
+        ))
+        if not (asks_percentage and asks_amount and asks_change):
             return None
 
         match = re.search(r"\b(STN[-–]\d+)\b", user_text, flags=re.IGNORECASE)
