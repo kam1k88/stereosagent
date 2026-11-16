@@ -329,6 +329,13 @@ class LocalAgent:
             return deterministic
 
         schemas, registry = build_tools(engine, as_of_date)
+        # Keep the runtime defensive: small local models may emit stale or extra
+        # arguments even when the current tool schema does not declare them.
+        tool_schemas = {
+            item["function"]["name"]: item["function"].get("parameters", {})
+            for item in schemas
+            if item.get("type") == "function" and item.get("function", {}).get("name")
+        }
         # Contract facts must be resolved from the current question and current-session
         # tools only. Prior assistant text is not evidence and can suppress tool calls in
         # smaller local models (e.g. Qwen 7B). Keep history in the UI, but do not feed it
@@ -377,18 +384,43 @@ class LocalAgent:
                         arguments = json.loads(arguments)
                     except json.JSONDecodeError:
                         arguments = {}
+                executed_arguments: dict[str, Any] = {}
+                ignored_arguments: list[str] = []
                 if name not in registry:
                     result = {"status": "error", "message": "Инструмент не входит в разрешённый список."}
+                elif not isinstance(arguments, dict):
+                    result = {"status": "invalid_arguments", "message": "Аргументы инструмента должны быть JSON-объектом."}
                 else:
-                    try:
-                        result = registry[name](**arguments)
-                        if not isinstance(result, dict):
-                            result = {"result": result}
-                    except TypeError as exc:
-                        result = {"status": "invalid_arguments", "message": str(exc)}
-                    except Exception as exc:
-                        result = {"status": "tool_error", "message": f"{type(exc).__name__}: {exc}"}
-                trace.append({"step": step, "tool": name, "arguments": arguments, "result": result})
+                    parameters = tool_schemas.get(name, {})
+                    properties = parameters.get("properties", {})
+                    required = parameters.get("required", [])
+                    ignored_arguments = sorted(set(arguments) - set(properties))
+                    executed_arguments = {key: value for key, value in arguments.items() if key in properties}
+                    missing_required = [key for key in required if key not in executed_arguments]
+                    if missing_required:
+                        result = {
+                            "status": "invalid_arguments",
+                            "message": "Не переданы обязательные аргументы: " + ", ".join(missing_required),
+                        }
+                    else:
+                        try:
+                            result = registry[name](**executed_arguments)
+                            if not isinstance(result, dict):
+                                result = {"result": result}
+                            if ignored_arguments:
+                                result["ignored_arguments"] = ignored_arguments
+                        except TypeError as exc:
+                            result = {"status": "invalid_arguments", "message": str(exc)}
+                        except Exception as exc:
+                            result = {"status": "tool_error", "message": f"{type(exc).__name__}: {exc}"}
+                trace.append({
+                    "step": step,
+                    "tool": name,
+                    "arguments": arguments,
+                    "executed_arguments": executed_arguments,
+                    "ignored_arguments": ignored_arguments,
+                    "result": result,
+                })
                 messages.append({
                     "role": "tool",
                     "tool_name": name,
