@@ -5,7 +5,7 @@ from datetime import date, datetime
 from typing import Any
 
 from .classifier import classify_document
-from .ingestion import normalize_text, sha256, split_paragraphs
+from .ingestion import decode_text, normalize_text, sha256, split_paragraphs
 from .models import Evidence, ParsedDocument
 
 DATE_RE = r"(\d{2}\.\d{2}\.\d{4})"
@@ -45,12 +45,7 @@ def _find_first(paragraphs: list[str], patterns: list[str], converter, doc_id: s
 
 
 def extract_document(filename: str, raw: bytes) -> ParsedDocument:
-    original = raw.decode("utf-8-sig", errors="replace")
-    if "\ufffd" in original:
-        try:
-            original = raw.decode("cp1251")
-        except UnicodeDecodeError:
-            pass
+    original = decode_text(raw)
     text = normalize_text(original)
     paragraphs = split_paragraphs(text)
     digest = sha256(raw)
