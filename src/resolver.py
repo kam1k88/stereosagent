@@ -51,7 +51,6 @@ def _resolve_field(base: ParsedDocument | None, amendments: list[ParsedDocument]
         if applicable:
             candidates.append((doc, doc.fields[field_name]))
         elif doc.document_type == "amendment_signed":
-            # A clearly future-dated agreement is simply not effective yet.
             future_dated = (
                 doc.signed_by_both is True
                 and doc.signature_date is not None
@@ -131,7 +130,11 @@ def resolve_contract(contract_number: str, docs: list[ParsedDocument], as_of: da
 
     if len(contracts) > 1:
         amount.status = "needs_review"
+        amount.value = None
+        amount.evidence = None
         delivery.status = "needs_review"
+        delivery.value = None
+        delivery.evidence = None
 
     supplier_doc = base
     supplier = supplier_doc.supplier if supplier_doc else None
@@ -154,5 +157,7 @@ def resolve_contract(contract_number: str, docs: list[ParsedDocument], as_of: da
             } for d in related
         ],
         proposed_changes=proposals,
+        rule_set_id=rules.get("rule_set_id", "unknown"),
+        rule_version=rules.get("version", 1),
         issues=issues,
     )
