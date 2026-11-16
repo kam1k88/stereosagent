@@ -9,7 +9,8 @@ CREATE TYPE document_type AS ENUM (
     'amendment_draft',
     'supplier_email',
     'appendix',
-    'other'
+    'other',
+    'unknown'
 );
 
 CREATE TYPE relation_type AS ENUM (
