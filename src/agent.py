@@ -35,6 +35,7 @@ class AgentResult:
     messages: list[dict[str, Any]] = field(default_factory=list)
     trace: list[dict[str, Any]] = field(default_factory=list)
     options: list[dict[str, Any]] = field(default_factory=list)
+    answerability: dict[str, Any] = field(default_factory=dict)
 
 
 def _format_rubles(kopecks: int) -> str:
@@ -70,6 +71,59 @@ class LocalAgent:
         )
         response.raise_for_status()
         return response.json()
+
+    def _assess_answerability(self, question: str, candidate_answer: str,
+                              trace: list[dict[str, Any]]) -> dict[str, Any]:
+        """Check whether the tool evidence is sufficient and identify concrete gaps."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string", "enum": ["answerable", "partial", "unanswerable"]},
+                "answer": {"type": "string"},
+                "reason": {"type": "string"},
+                "missing_information": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["status", "answer", "reason", "missing_information"],
+        }
+        prompt = (
+            "Проведи аудит достаточности данных для ответа на вопрос по договорам. "
+            "Единственный источник фактов — результаты инструментов в trace. Черновик ответа "
+            "не является доказательством. Если trace пустой, инструмент не нашёл нужное поле, "
+            "статус needs_review, или документы прямо указывают на отсутствующее приложение, "
+            "не выдавай предположение за факт. Различай: (1) значение не найдено в тексте; "
+            "(2) на документ ссылаются, но его нет в загруженном комплекте; "
+            "(3) документ/изменение есть, но требует проверки; (4) данных достаточно. "
+            "Для каждого пробела назови конкретно, что загрузить или уточнить. Не проси документ, "
+            "который по trace не следует из контекста. Не придумывай номера файлов, абзацев, "
+            "суммы или даты. Если часть вопроса можно ответить, верни partial и отдели известное "
+            "от неизвестного. Ответь по-русски. Верни только JSON по схеме.\n\n"
+            f"ВОПРОС: {question}\nЧЕРНОВИК: {candidate_answer}\n"
+            f"TRACE: {json.dumps(trace, ensure_ascii=False, default=str)}"
+        )
+        response = requests.post(
+            f"{self.host}/api/chat",
+            json={
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": "Ты аудитор достаточности доказательств. Не добавляй факты от себя."},
+                    {"role": "user", "content": prompt},
+                ],
+                "format": schema,
+                "stream": False,
+                "options": {"temperature": 0.0},
+            },
+            timeout=(5, 180),
+        )
+        response.raise_for_status()
+        payload = response.json().get("message", {}).get("content", "")
+        parsed = json.loads(payload)
+        if parsed.get("status") not in ("answerable", "partial", "unanswerable"):
+            raise ValueError("Некорректный статус answerability.")
+        if not isinstance(parsed.get("answer"), str) or not isinstance(parsed.get("reason"), str):
+            raise ValueError("Некорректная структура answerability.")
+        if not isinstance(parsed.get("missing_information"), list):
+            raise ValueError("missing_information должен быть списком.")
+        return parsed
 
     def _generate_cost_options(self, contract_number: str, engine: ContractEngine, as_of_date) -> AgentResult:
         """Generate explicitly hypothetical pricing scenarios; never alter contract facts."""
@@ -288,10 +342,28 @@ class LocalAgent:
             messages.append(assistant)
             calls = assistant.get("tool_calls") or []
             if not calls:
-                answer = assistant.get("content", "").strip()
-                if not answer:
-                    answer = "Модель не вернула текстовый ответ. Попробуйте переформулировать вопрос."
-                return AgentResult(answer=answer, messages=messages, trace=trace)
+                candidate = assistant.get("content", "").strip()
+                if not candidate:
+                    candidate = "Модель не вернула текстовый ответ."
+                try:
+                    assessment = self._assess_answerability(user_text, candidate, trace)
+                    answer = assessment.get("answer", candidate)
+                    if assessment.get("status") == "partial":
+                        answer += "\\n\\n**Чего не хватает:**\\n" + "\\n".join(f"- {item}" for item in assessment.get("missing_information", []))
+                    elif assessment.get("status") == "unanswerable":
+                        answer = (answer or "Не могу достоверно ответить на этот вопрос.")
+                        if assessment.get("reason"):
+                            answer += "\\n\\n**Почему:** " + assessment["reason"]
+                        if assessment.get("missing_information"):
+                            answer += "\\n\\n**Что требуется:**\\n" + "\\n".join(f"- {item}" for item in assessment["missing_information"])
+                    return AgentResult(answer=answer, messages=messages, trace=trace, answerability=assessment)
+                except (requests.RequestException, ValueError, json.JSONDecodeError, TypeError) as exc:
+                    return AgentResult(
+                        answer=(candidate + "\\n\\n_Не удалось проверить достаточность доказательств; "
+                                "ответ не прошёл дополнительную проверку._"),
+                        messages=messages, trace=trace,
+                        answerability={"status": "not_assessed", "reason": str(exc), "missing_information": []},
+                    )
 
             for call in calls:
                 function = call.get("function") or {}
