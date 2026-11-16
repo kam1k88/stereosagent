@@ -154,6 +154,28 @@ except Exception as exc:
     st.error(f"Не удалось обработать документы: {exc}")
     st.stop()
 
+# Optional persistence. The default demo remains fully in-memory.
+if os.getenv("STEREOSAGENT_PERSISTENCE", "").strip().lower() == "postgres":
+    persisted_hashes = st.session_state.setdefault("postgres_persisted_hashes", set())
+    pending_documents = [
+        doc for doc in engine.documents if doc.content_hash not in persisted_hashes
+    ]
+    if pending_documents:
+        try:
+            from src.database import PostgresRepository
+            from src.database.connection import connect
+
+            with connect() as connection:
+                PostgresRepository(connection).persist_engine(pending_documents)
+            persisted_hashes.update(doc.content_hash for doc in pending_documents)
+            st.caption(f"PostgreSQL: сохранено новых документов — {len(pending_documents)}.")
+        except Exception as exc:
+            st.error(
+                "Не удалось сохранить документы в PostgreSQL. "
+                "Текущая проверка продолжает работать в памяти; "
+                f"проверьте DATABASE_URL и применённую schema.sql. Причина: {exc}"
+            )
+
 st.caption(
     f"{source_mode} · обработано файлов: {len(engine.documents)} · "
     f"обнаружено договоров: {len(engine.contract_numbers())}"
