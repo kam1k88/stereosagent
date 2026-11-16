@@ -44,6 +44,10 @@ def _find_first(paragraphs: list[str], patterns: list[str], converter, doc_id: s
     return None
 
 
+def _clean_party(value: str) -> str:
+    return re.sub(r"\s+", " ", value.strip()).rstrip(" .;,")
+
+
 def extract_document(filename: str, raw: bytes) -> ParsedDocument:
     original = decode_text(raw)
     text = normalize_text(original)
@@ -63,11 +67,28 @@ def extract_document(filename: str, raw: bytes) -> ParsedDocument:
     supplier_evidence = _find_first(
         paragraphs,
         [r"Поставщик\s*:\s*([^\n.]+)"],
-        lambda x: x.strip().replace("«", "").replace("»", "").strip().strip("\""),
+        _clean_party,
+        document_id,
+        filename,
+    )
+    buyer_evidence = _find_first(
+        paragraphs,
+        [r"Покупатель\s*:\s*([^\n.]+)"],
+        _clean_party,
         document_id,
         filename,
     )
     supplier = supplier_evidence.value if supplier_evidence else None
+    buyer = buyer_evidence.value if buyer_evidence else None
+
+    sender_evidence = _find_first(
+        paragraphs, [r"(?:От|From)\s*:\s*([^\n]+)"], _clean_party, document_id, filename
+    )
+    recipient_evidence = _find_first(
+        paragraphs, [r"(?:Кому|To)\s*:\s*([^\n]+)"], _clean_party, document_id, filename
+    )
+    sender = sender_evidence.value if sender_evidence else None
+    recipient = recipient_evidence.value if recipient_evidence else None
 
     signature_date = None
     effective_date = None
@@ -115,6 +136,10 @@ def extract_document(filename: str, raw: bytes) -> ParsedDocument:
         signed_by_both is not True or not signature_date or not effective_date
     ):
         issues.append("Недостаточно подтверждений подписания или даты вступления в силу.")
+    if doc_type == "supplier_email" and not sender:
+        issues.append("Не удалось определить отправителя письма.")
+    if doc_type == "supplier_email" and not recipient:
+        issues.append("Не удалось определить получателя письма.")
 
     return ParsedDocument(
         document_id=document_id,
@@ -126,6 +151,10 @@ def extract_document(filename: str, raw: bytes) -> ParsedDocument:
         contract_number=contract_number,
         supplier=supplier,
         supplier_evidence=supplier_evidence,
+        buyer=buyer,
+        buyer_evidence=buyer_evidence,
+        sender=sender,
+        recipient=recipient,
         signature_date=signature_date,
         effective_date=effective_date,
         signed_by_both=signed_by_both,
