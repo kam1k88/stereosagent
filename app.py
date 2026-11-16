@@ -248,6 +248,8 @@ with tab_chat:
             st.markdown(item["content"])
             if item.get("options"):
                 render_cost_options(item["options"], item.get("message_index", 0))
+            if item.get("answerability", {}).get("status") in ("partial", "unanswerable"):
+                st.info("Проверка достаточности данных: " + item["answerability"]["status"])
             if item.get("trace"):
                 with st.expander("Трассировка инструментов"):
                     for event in item["trace"]:
@@ -268,7 +270,7 @@ with tab_chat:
                         for m in st.session_state.chat_messages[:-1]
                     ]
                     result = agent.run(prompt, engine, as_of, history)
-                    if not result.trace and result.messages:
+                    if not result.trace and result.messages and result.answerability.get("status") == "not_assessed":
                         answer = (
                             "Модель не вызвала ни одного инструмента. Чтобы не выдавать "
                             "непроверенный ответ о договоре, я не буду считать ответ подтверждённым. "
@@ -287,7 +289,8 @@ with tab_chat:
                                 st.json({"arguments": event["arguments"], "result": event["result"]})
                     st.session_state.chat_messages.append({
                         "role": "assistant", "content": answer, "trace": result.trace,
-                        "options": result.options, "message_index": message_index
+                        "options": result.options, "message_index": message_index,
+                        "answerability": result.answerability
                     })
                 except Exception as exc:
                     message = (
