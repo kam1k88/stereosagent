@@ -173,3 +173,49 @@ def test_answerability_assessment_marks_empty_trace_as_not_evidence():
 
     assert result["status"] == "unanswerable"
     assert "500000" not in result["answer"]
+
+
+
+def test_factual_tool_planning_ignores_previous_chat_history():
+    engine = sample_engine()
+    agent = LocalAgent()
+    captured = []
+
+    def fake_chat(messages, schemas):
+        captured.append(list(messages))
+        if len(captured) == 1:
+            return {"message": {
+                "role": "assistant",
+                "tool_calls": [{
+                    "function": {
+                        "name": "get_contract_snapshot",
+                        "arguments": {"contract_number": "STN-103", "as_of": "2026-03-10"},
+                    }
+                }],
+            }}
+        return {"message": {"role": "assistant", "content": "Стоимость STN-103 не указана."}}
+
+    agent._chat = fake_chat
+    agent._assess_answerability = lambda question, candidate, trace: {
+        "status": "unanswerable",
+        "answer": "Стоимость STN-103 не указана.",
+        "reason": "В договоре отсутствует числовая стоимость.",
+        "missing_information": ["Нужно приложение № 1 или подписанная спецификация."],
+    }
+    result = agent.run(
+        "Какая сумма договора STN-103?",
+        engine,
+        date(2026, 3, 10),
+        history=[
+            {"role": "user", "content": "Какой срок поставки по STN-102?"},
+            {"role": "assistant", "content": "Действующий срок — 20.03.2026."},
+        ],
+    )
+
+    first_messages = captured[0]
+    assert [item["role"] for item in first_messages] == ["system", "user"]
+    assert first_messages[-1]["content"] == "Какая сумма договора STN-103?"
+    assert "STN-102" not in str(first_messages)
+    assert result.trace[0]["tool"] == "get_contract_snapshot"
+    assert result.trace[0]["arguments"]["contract_number"] == "STN-103"
+    assert result.answerability["status"] == "unanswerable"
