@@ -28,7 +28,7 @@ streamlit run app.py
 
 ## Архитектура
 
-Streamlit Chat → Local Agent Runtime → Ollama /api/chat (tool calling) → allowlisted Python Tools → Domain Workflows → Evidence + Contract Snapshot.
+Streamlit Chat → собственный Local Agent Runtime → Ollama /api/chat (native tool calling) → шесть allowlisted Python Tools → Domain Workflows → Evidence + Contract Snapshot. Hermes/MCP не используются: runtime и registry инструментов принадлежат приложению.
 
 Обработка документа: ingestion/normalization → classification → extraction → evidence. Resolver применяет версионируемые правила из config/rules.json. LLM не определяет юридическую применимость изменений. MCP/Hermes, vector DB и платные API не требуются.
 
@@ -36,7 +36,7 @@ Streamlit Chat → Local Agent Runtime → Ollama /api/chat (tool calling) → a
 
 1. **Детерминированный resolver.** Подписанное обеими сторонами допсоглашение применяется только при известных датах подписания и вступления в силу, если обе даты не позже даты проверки. Проекты и письма показываются отдельно. Компромисс: неизвестный или сложный юридический статус требует ручной проверки.
 2. **Evidence-first.** Каждое найденное поле несёт файл, цитату, номер абзаца и anchor. Компромисс: точность зависит от формулировок TXT; неизвестные шаблоны требуют расширения extractor.
-3. **Собственный ограниченный agent runtime.** Ollama выбирает один из пяти allowlisted tools; максимум пять шагов на вопрос. Компромисс: качество tool calling зависит от выбранной модели. Чат не считается источником фактов без вызова инструмента.
+3. **Собственный ограниченный agent runtime.** Ollama выбирает один из шести allowlisted tools; максимум пять шагов на вопрос. Компромисс: качество tool calling зависит от выбранной модели. Чат не считается источником фактов без вызова инструмента.
 
 ## Допущения и границы
 
