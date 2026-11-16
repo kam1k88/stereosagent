@@ -1,0 +1,79 @@
+SOURCE-AVAILABLE EVALUATION LICENSE
+Version 1.0
+Copyright (c) 2026 Arkady Maximov. All rights reserved.
+
+IMPORTANT
+This is a custom, source-available license. It is not an Open Source license and does not grant any rights under an OSI-approved license.
+
+1. DEFINITIONS
+
+"Software" means this repository and all source code, object code, documentation, configuration, examples, and other materials distributed with it, unless a file contains a separate license notice.
+
+"Licensor" means the copyright holder identified above.
+
+"You" means the individual or legal entity exercising rights under this License.
+
+"Commercial Use" means any use of the Software, directly or indirectly, for or in connection with:
+(a) providing a product, service, platform, hosted service, SaaS, or other offering to third parties;
+(b) operating or deploying the Software in a production, operational, or revenue-generating environment;
+(c) incorporating, embedding, adapting, or using any part of the Software in a commercial product, service, workflow, or business operation;
+(d) offering support, implementation, consulting, or other paid services based on the Software; or
+(e) obtaining a commercial, competitive, strategic, or financial benefit beyond internal evaluation.
+
+2. LIMITED PERMISSION
+
+Subject to this License, Licensor grants You a limited, non-exclusive, non-transferable, revocable license to:
+(a) view and inspect the source code;
+(b) download and run the Software locally solely to evaluate its functionality and technical suitability;
+(c) make private modifications solely for that evaluation; and
+(d) discuss and demonstrate the Software privately to Your employees, professional advisers, or evaluation team who are bound by confidentiality obligations.
+
+This permission does not authorize public redistribution, publication of modified versions, sublicensing, or deployment for operational use.
+
+3. COMMERCIAL USE REQUIRES A SEPARATE AGREEMENT
+
+Commercial Use is strictly prohibited unless and until You enter into a separate written agreement signed by Licensor.
+
+Any commercial agreement must expressly define the permitted scope, territory, duration, fees or other consideration, ownership of modifications, support obligations, liability, and termination rights. The parties may negotiate a commercial license, revenue share, royalties, equity participation, partnership, or another mutually agreed arrangement. None of these terms is granted or promised by this License.
+
+No payment, equity, partnership, or other commercial rights arise merely from viewing, downloading, evaluating, or modifying the Software.
+
+4. RESTRICTIONS
+
+You may not, without Licensor's prior written permission:
+(a) use the Software for Commercial Use;
+(b) deploy the Software for production, operational, customer-facing, or revenue-generating purposes;
+(c) distribute, publish, sublicense, sell, rent, lease, or otherwise make the Software or a modified version available to any third party;
+(d) remove or alter copyright, authorship, or license notices;
+(e) represent that You own the Software or that Licensor endorses Your product or service; or
+(f) use the Software or its source code to create or support a competing commercial offering.
+
+5. OWNERSHIP
+
+The Software is licensed, not sold. Licensor retains all right, title, and interest in and to the Software, including its original code and documentation. No ownership, assignment, or other transfer of intellectual property rights is made to You under this License.
+
+You retain ownership of materials that You independently create, but this does not grant You rights to use, distribute, or commercially exploit any part of the Software incorporated into those materials.
+
+6. THIRD-PARTY MATERIALS
+
+This License applies only to materials owned by Licensor. Third-party components remain subject to their own licenses and notices. Nothing in this License overrides or restricts rights that You independently receive under applicable third-party licenses.
+
+7. TERMINATION
+
+The permissions granted under this License terminate automatically if You breach its terms. Upon termination, You must stop using the Software and delete copies in Your possession or control, except where retention is required by applicable law. Termination does not limit any other remedies available to Licensor.
+
+8. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. TO THE MAXIMUM EXTENT PERMITTED BY LAW, LICENSOR SHALL NOT BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM THE SOFTWARE OR ITS USE.
+
+9. NO ADDITIONAL RIGHTS
+
+No rights are granted by implication, estoppel, exhaustion, or otherwise. Any permission not expressly granted in this License is reserved by Licensor.
+
+10. GOVERNING LAW
+
+The governing law and dispute-resolution forum shall be specified in a separate written agreement between You and Licensor. If no such agreement exists, applicable mandatory law and conflict-of-law rules determine the governing law and forum.
+
+11. CONTACT
+
+For evaluation questions or to discuss a commercial license or partnership, contact the copyright holder through the contact details published in the repository profile.
